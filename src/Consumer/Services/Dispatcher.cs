@@ -37,9 +37,21 @@ public class Dispatcher : IDispatcher
       },
     };
 
-    this._kafka.Publish(
-      "my-other-topic", msg, PublishCb
-    );
+    try
+    {
+      this._kafka.Publish(
+        "my-other-topic", msg, PublishCb
+      );
+    }
+    catch (Exception ex)
+    {
+      this._logger.Log(
+        Microsoft.Extensions.Logging.LogLevel.Error,
+        ex,
+        ex.Message
+      );
+      throw;
+    }
   }
 
   private void PublishCb(

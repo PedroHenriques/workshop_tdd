@@ -19,6 +19,8 @@ public class DispatcherTests : IDisposable
     this._kafkaMock = new Mock<IKafka<OutboundKey, OutboundValue>>(MockBehavior.Strict);
     this._mongoMock = new Mock<IMongodb>(MockBehavior.Strict);
 
+    this._loggerMock.Setup(s => s.Log(It.IsAny<Microsoft.Extensions.Logging.LogLevel>(), It.IsAny<Exception?>(), It.IsAny<string>()));
+
     this._kafkaMock.Setup(s => s.Publish(It.IsAny<string>(), It.IsAny<Message<OutboundKey, OutboundValue>>(), It.IsAny<Action<DeliveryResult<OutboundKey, OutboundValue>?, Exception?>>()));
 
     this._mongoMock.Setup(s => s.InsertOne<MongoDocument>(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<MongoDocument>()))
@@ -49,6 +51,52 @@ public class DispatcherTests : IDisposable
     sut.Dispatch(testInboundMsg);
 
     this._kafkaMock.Verify(m => m.Publish("my-other-topic", It.IsAny<Message<OutboundKey, OutboundValue>>(), It.IsAny<Action<DeliveryResult<OutboundKey, OutboundValue>?, Exception?>>()), Times.Once());
+  }
+
+  [Fact]
+  public void Dispatch_IFCallingPublishOnToolkitKafkaServiceThrowsAnException_ItShouldThrowTheException()
+  {
+    var testEx = new Exception();
+    this._kafkaMock.Setup(s => s.Publish(It.IsAny<string>(), It.IsAny<Message<OutboundKey, OutboundValue>>(), It.IsAny<Action<DeliveryResult<OutboundKey, OutboundValue>?, Exception?>>()))
+      .Throws(testEx);
+
+    var testInboundMsg = new Message<InboundKey, InboundValue>
+    {
+      Value = new InboundValue
+      {
+        Id = Guid.NewGuid(),
+        Type = 78645,
+        Price = 185.3,
+      },
+    };
+
+    var sut = new Dispatcher(this._loggerMock.Object, this._kafkaMock.Object, this._mongoMock.Object);
+
+    var actualEx = Assert.Throws<Exception>(() => sut.Dispatch(testInboundMsg));
+    Assert.Equal(testEx, actualEx);
+  }
+
+  [Fact]
+  public void Dispatch_IFCallingPublishOnToolkitKafkaServiceThrowsAnException_ItShouldLogAnError()
+  {
+    var testEx = new Exception("hello from unit test");
+    this._kafkaMock.Setup(s => s.Publish(It.IsAny<string>(), It.IsAny<Message<OutboundKey, OutboundValue>>(), It.IsAny<Action<DeliveryResult<OutboundKey, OutboundValue>?, Exception?>>()))
+      .Throws(testEx);
+
+    var testInboundMsg = new Message<InboundKey, InboundValue>
+    {
+      Value = new InboundValue
+      {
+        Id = Guid.NewGuid(),
+        Type = 78645,
+        Price = 185.3,
+      },
+    };
+
+    var sut = new Dispatcher(this._loggerMock.Object, this._kafkaMock.Object, this._mongoMock.Object);
+
+    var _ = Assert.Throws<Exception>(() => sut.Dispatch(testInboundMsg));
+    this._loggerMock.Verify(m => m.Log(Microsoft.Extensions.Logging.LogLevel.Error, testEx, testEx.Message));
   }
 
   [Fact]
