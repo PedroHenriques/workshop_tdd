@@ -60,5 +60,7 @@ internal class Program
       schemaRegistryConfig, kafkaProducerConfig, consumerConfig
     );
     IKafka<dynamic, dynamic> kafka = new Kafka<dynamic, dynamic>(kafkaInputs);
+
+
   }
 }
