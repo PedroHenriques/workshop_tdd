@@ -1,10 +1,10 @@
 services:
-  api:
-    image: ${PROJECT_NAME:-myapp}_api:${IMAGE_TAG:-latest}
+  consumer:
+    image: ${PROJECT_NAME:-myapp}_consumer:${IMAGE_TAG:-latest}
     build:
       context: ../../
-      dockerfile: ./src/Api/Dockerfile
-    container_name: "api"
+      dockerfile: ./src/Consumer/Dockerfile
+    container_name: "consumer"
     restart: on-failure
     depends_on:
       api_db:
@@ -14,7 +14,6 @@ services:
     environment:
       - DEPLOYMENT_ENV=local
       - DOTNET_ENVIRONMENT=Development
-      - ASPNETCORE_HTTP_PORTS=10000
       - MONGO_CON_STR=mongodb://admin:pw@api_db:27017/admin?authMechanism=SCRAM-SHA-256&replicaSet=rs0
       - REDIS_CON_STR=api_redis:6379
       - KAFKA_SCHEMA_REGISTRY_URL=http://schema-registry:8081

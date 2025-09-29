@@ -1,89 +1,64 @@
-using System.Dynamic;
-using StackExchange.Redis;
+using System.Diagnostics.CodeAnalysis;
 using Confluent.Kafka;
+using Confluent.SchemaRegistry;
 using Toolkit;
 using Toolkit.Types;
+using LoggerUtils = Toolkit.Utils.Logger;
 using MongodbUtils = Toolkit.Utils.Mongodb;
-using RedisUtils = Toolkit.Utils.Redis;
-using KafkaUtils = Toolkit.Utils.Kafka<string, dynamic>;
-using Confluent.SchemaRegistry;
+using KafkaUtils = Toolkit.Utils.Kafka<dynamic, dynamic>;
 
-WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
-
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
-
-WebApplication app = builder.Build();
-
-if (app.Environment.IsDevelopment())
+[ExcludeFromCodeCoverage(Justification = "Not unit testable due to instantiating classes for service setup.")]
+internal class Program
 {
-  app.UseSwagger();
-  app.UseSwaggerUI();
-}
-
-app.MapGet(
-  "/",
-  async () =>
+  private static async Task Main(string[] args)
   {
-    dynamic document = new ExpandoObject();
-    document.prop1 = "value 1";
-    document.prop2 = "value 2";
+    var loggerInputs = LoggerUtils.PrepareInputs("Consumer", "Program.cs", "Main thread");
+    ILogger logger = new Logger(loggerInputs);
 
-    string? mongoConStr = Environment.GetEnvironmentVariable("MONGO_CON_STR");
-    if (mongoConStr == null)
-    {
-      throw new Exception("Could not get the 'MONGO_CON_STR' environment variable");
-    }
-    MongoDbInputs mongodbInputs = MongodbUtils.PrepareInputs(mongoConStr);
-    IMongodb mongoDb = new Mongodb(mongodbInputs);
-    await mongoDb.InsertOne<dynamic>("myTestDb", "myTestCol", document);
+    var mongodbInputs = MongodbUtils.PrepareInputs(
+      "mongodb://admin:pw@api_db:27017/admin?authMechanism=SCRAM-SHA-256&replicaSet=rs0"
+    );
+    IMongodb db = new Mongodb(mongodbInputs);
 
-
-    string? redisConStr = Environment.GetEnvironmentVariable("REDIS_CON_STR");
-    if (redisConStr == null)
+    var schemaRegistryConfig = new SchemaRegistryConfig
     {
-      throw new Exception("Could not get the 'REDIS_CON_STR' environment variable");
-    }
-    ConfigurationOptions redisConOpts = new ConfigurationOptions
-    {
-      EndPoints = { redisConStr },
+      Url = "",
+      BasicAuthCredentialsSource = AuthCredentialsSource.UserInfo,
+      BasicAuthUserInfo = $":",
     };
-    RedisInputs redisInputs = RedisUtils.PrepareInputs(redisConOpts, "test consumer group");
-    ICache redis = new Redis(redisInputs);
-    await redis.Set("prop1", document.prop1);
-    await redis.Set("prop2", document.prop2);
-
-
-    string? schemaRegistryUrl = Environment.GetEnvironmentVariable("KAFKA_SCHEMA_REGISTRY_URL");
-    if (schemaRegistryUrl == null)
+    var kafkaProducerConfig = new ProducerConfig
     {
-      throw new Exception("Could not get the 'KAFKA_SCHEMA_REGISTRY_URL' environment variable");
-    }
-    SchemaRegistryConfig schemaRegistryConfig = new SchemaRegistryConfig { Url = schemaRegistryUrl };
-
-    string? kafkaConStr = Environment.GetEnvironmentVariable("KAFKA_CON_STR");
-    if (kafkaConStr == null)
+      BootstrapServers = "",
+      Acks = Acks.All,
+      SecurityProtocol = SecurityProtocol.SaslSsl,
+      SaslMechanism = SaslMechanism.Plain,
+      SaslUsername = "",
+      SaslPassword = "",
+    };
+    var consumerConfig = new ConsumerConfig
     {
-      throw new Exception("Could not get the 'KAFKA_CON_STR' environment variable");
-    }
-    var producerConfig = new ProducerConfig
-    {
-      BootstrapServers = kafkaConStr,
+      BootstrapServers = "",
+      GroupId = "",
+      EnableAutoCommit = false,
+      AutoOffsetReset = AutoOffsetReset.Earliest,
+      SaslUsername = "",
+      SaslPassword = "",
+      SecurityProtocol = SecurityProtocol.SaslSsl,
+      SaslMechanism = SaslMechanism.Plain
     };
 
-    KafkaInputs<string, dynamic> kafkaInputs = KafkaUtils.PrepareInputs(
-      schemaRegistryConfig, "myTestTopic-value", 1, producerConfig
-    );
-    IKafka<string, dynamic> kafka = new Kafka<string, dynamic>(kafkaInputs);
-    kafka.Publish(
-      "myTestTopic",
-      new Message<string, dynamic> { Key = "prop1", Value = document },
-      (res, ex) => { Console.WriteLine($"Event inserted in partition: {res.Partition} and offset: {res.Offset}."); }
-    );
+    if (true)
+    {
+      schemaRegistryConfig.BasicAuthCredentialsSource = null;
+      kafkaProducerConfig.SecurityProtocol = null;
+      kafkaProducerConfig.SaslMechanism = null;
+      consumerConfig.SecurityProtocol = null;
+      consumerConfig.SaslMechanism = null;
+    }
 
-
-    return Results.Ok("Hello World!");
+    var kafkaInputs = KafkaUtils.PrepareInputs(
+      schemaRegistryConfig, kafkaProducerConfig, consumerConfig
+    );
+    IKafka<dynamic, dynamic> kafka = new Kafka<dynamic, dynamic>(kafkaInputs);
   }
-);
-
-app.Run();
+}
