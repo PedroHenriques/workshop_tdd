@@ -1,4 +1,5 @@
 using Confluent.Kafka;
+using Consumer.Models;
 using Toolkit.Types;
 
 namespace Consumer;
@@ -6,11 +7,11 @@ namespace Consumer;
 public class Consume
 {
   private readonly ILogger _logger;
-  private readonly IKafka<dynamic, dynamic> _kafka;
+  private readonly IKafka<InboundKey, InboundValue> _kafka;
   private readonly IDispatcher _dispatcher;
 
   public Consume(
-    ILogger logger, IKafka<dynamic, dynamic> kafka, IDispatcher dispatcher
+    ILogger logger, IKafka<InboundKey, InboundValue> kafka, IDispatcher dispatcher
   )
   {
     this._logger = logger;
@@ -26,23 +27,19 @@ public class Consume
   }
 
   private void SubscribeCb(
-    ConsumeResult<dynamic, dynamic>? res, Exception? ex
+    ConsumeResult<InboundKey, InboundValue>? res, Exception? ex
   )
   {
-    this._logger.Log(
-      Microsoft.Extensions.Logging.LogLevel.Error, ex, ""
-    );
     if (ex != null)
     {
-    }
-    else
-    {
-      this._dispatcher.Dispatch();
+      this._logger.Log(
+        Microsoft.Extensions.Logging.LogLevel.Error, ex, ""
+      );
     }
 
-    if (res != null)
-    {
-      this._kafka.Commit(res);
-    }
+    if (res == null) { return; }
+
+    this._dispatcher.Dispatch(res.Message);
+    this._kafka.Commit(res);
   }
 }

@@ -5,7 +5,8 @@ using Toolkit;
 using Toolkit.Types;
 using LoggerUtils = Toolkit.Utils.Logger;
 using MongodbUtils = Toolkit.Utils.Mongodb;
-using KafkaUtils = Toolkit.Utils.Kafka<dynamic, dynamic>;
+using KafkaUtils = Toolkit.Utils.Kafka<Consumer.Models.InboundKey, Consumer.Models.InboundValue>;
+using Consumer.Models;
 
 [ExcludeFromCodeCoverage(Justification = "Not unit testable due to instantiating classes for service setup.")]
 internal class Program
@@ -59,7 +60,7 @@ internal class Program
     var kafkaInputs = KafkaUtils.PrepareInputs(
       schemaRegistryConfig, kafkaProducerConfig, consumerConfig
     );
-    IKafka<dynamic, dynamic> kafka = new Kafka<dynamic, dynamic>(kafkaInputs);
+    IKafka<InboundKey, InboundValue> kafka = new Kafka<InboundKey, InboundValue>(kafkaInputs);
 
 
   }

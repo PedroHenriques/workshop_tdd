@@ -1,4 +1,5 @@
 using Confluent.Kafka;
+using Consumer.Models;
 using Moq;
 using Toolkit.Types;
 
@@ -8,21 +9,21 @@ namespace Consumer.Tests;
 public class ConsumerTests : IDisposable
 {
   private readonly Mock<ILogger> _loggerMock;
-  private readonly Mock<IKafka<dynamic, dynamic>> _kafkaMock;
+  private readonly Mock<IKafka<InboundKey, InboundValue>> _kafkaMock;
   private readonly Mock<IDispatcher> _dispatcherMock;
 
   public ConsumerTests()
   {
     this._loggerMock = new Mock<ILogger>(MockBehavior.Strict);
-    this._kafkaMock = new Mock<IKafka<dynamic, dynamic>>(MockBehavior.Strict);
+    this._kafkaMock = new Mock<IKafka<InboundKey, InboundValue>>(MockBehavior.Strict);
     this._dispatcherMock = new Mock<IDispatcher>(MockBehavior.Strict);
 
     this._loggerMock.Setup(s => s.Log(It.IsAny<Microsoft.Extensions.Logging.LogLevel>(), It.IsAny<Exception?>(), It.IsAny<string>()));
 
-    this._kafkaMock.Setup(s => s.Subscribe(It.IsAny<IEnumerable<string>>(), It.IsAny<Action<ConsumeResult<dynamic, dynamic>?, Exception?>>(), It.IsAny<CancellationTokenSource>()));
-    this._kafkaMock.Setup(s => s.Commit(It.IsAny<ConsumeResult<dynamic, dynamic>>()));
+    this._kafkaMock.Setup(s => s.Subscribe(It.IsAny<IEnumerable<string>>(), It.IsAny<Action<ConsumeResult<InboundKey, InboundValue>?, Exception?>>(), It.IsAny<CancellationTokenSource>()));
+    this._kafkaMock.Setup(s => s.Commit(It.IsAny<ConsumeResult<InboundKey, InboundValue>>()));
 
-    this._dispatcherMock.Setup(s => s.Dispatch());
+    this._dispatcherMock.Setup(s => s.Dispatch(It.IsAny<Message<InboundKey, InboundValue>>()));
   }
 
   public void Dispose()
@@ -38,7 +39,7 @@ public class ConsumerTests : IDisposable
     var sut = new Consume(this._loggerMock.Object, this._kafkaMock.Object, this._dispatcherMock.Object);
     sut.Subscribe();
 
-    this._kafkaMock.Verify(m => m.Subscribe(It.IsAny<IEnumerable<string>>(), It.IsAny<Action<ConsumeResult<dynamic, dynamic>?, Exception?>>(), It.IsAny<CancellationTokenSource>()), Times.Once());
+    this._kafkaMock.Verify(m => m.Subscribe(It.IsAny<IEnumerable<string>>(), It.IsAny<Action<ConsumeResult<InboundKey, InboundValue>?, Exception?>>(), It.IsAny<CancellationTokenSource>()), Times.Once());
   }
 
   [Fact]
@@ -47,19 +48,21 @@ public class ConsumerTests : IDisposable
     var sut = new Consume(this._loggerMock.Object, this._kafkaMock.Object, this._dispatcherMock.Object);
     sut.Subscribe();
 
-    this._kafkaMock.Verify(m => m.Subscribe(new string[] { "my-topic" }, It.IsAny<Action<ConsumeResult<dynamic, dynamic>?, Exception?>>(), It.IsAny<CancellationTokenSource>()), Times.Once());
+    this._kafkaMock.Verify(m => m.Subscribe(new string[] { "my-topic" }, It.IsAny<Action<ConsumeResult<InboundKey, InboundValue>?, Exception?>>(), It.IsAny<CancellationTokenSource>()), Times.Once());
   }
 
   [Fact]
-  public void Subscribe_IfTheDelegateProvidedAs2ndArgumentIsInvoked_ItShouldCallDispatchOnTheDispatcherInstanceOnce()
+  public void Subscribe_IfTheDelegateProvidedAs2ndArgumentIsInvoked_ItShouldCallDispatchOnTheDispatcherInstanceOnceWithTheExpectedMessage()
   {
     var sut = new Consume(this._loggerMock.Object, this._kafkaMock.Object, this._dispatcherMock.Object);
     sut.Subscribe();
 
-    var cb = this._kafkaMock.Invocations[0].Arguments[1] as Action<ConsumeResult<dynamic, dynamic>?, Exception?>;
-    cb(null, null);
+    var testMsg = new Message<InboundKey, InboundValue> { };
 
-    this._dispatcherMock.Verify(m => m.Dispatch(), Times.Once());
+    var cb = this._kafkaMock.Invocations[0].Arguments[1] as Action<ConsumeResult<InboundKey, InboundValue>?, Exception?>;
+    cb(new ConsumeResult<InboundKey, InboundValue> { Message = testMsg }, null);
+
+    this._dispatcherMock.Verify(m => m.Dispatch(testMsg), Times.Once());
   }
 
   [Fact]
@@ -68,9 +71,9 @@ public class ConsumerTests : IDisposable
     var sut = new Consume(this._loggerMock.Object, this._kafkaMock.Object, this._dispatcherMock.Object);
     sut.Subscribe();
 
-    var testConsumeRes = new ConsumeResult<dynamic, dynamic> { };
+    var testConsumeRes = new ConsumeResult<InboundKey, InboundValue> { };
 
-    var cb = this._kafkaMock.Invocations[0].Arguments[1] as Action<ConsumeResult<dynamic, dynamic>?, Exception?>;
+    var cb = this._kafkaMock.Invocations[0].Arguments[1] as Action<ConsumeResult<InboundKey, InboundValue>?, Exception?>;
     cb(testConsumeRes, null);
 
     this._kafkaMock.Verify(m => m.Commit(testConsumeRes), Times.Once());
@@ -84,7 +87,7 @@ public class ConsumerTests : IDisposable
 
     var testEx = new Exception();
 
-    var cb = this._kafkaMock.Invocations[0].Arguments[1] as Action<ConsumeResult<dynamic, dynamic>?, Exception?>;
+    var cb = this._kafkaMock.Invocations[0].Arguments[1] as Action<ConsumeResult<InboundKey, InboundValue>?, Exception?>;
     cb(null, testEx);
 
     this._loggerMock.Verify(m => m.Log(Microsoft.Extensions.Logging.LogLevel.Error, testEx, ""), Times.Once());
@@ -98,10 +101,10 @@ public class ConsumerTests : IDisposable
 
     var testEx = new Exception();
 
-    var cb = this._kafkaMock.Invocations[0].Arguments[1] as Action<ConsumeResult<dynamic, dynamic>?, Exception?>;
+    var cb = this._kafkaMock.Invocations[0].Arguments[1] as Action<ConsumeResult<InboundKey, InboundValue>?, Exception?>;
     cb(null, testEx);
 
-    this._dispatcherMock.Verify(m => m.Dispatch(), Times.Never());
+    this._dispatcherMock.Verify(m => m.Dispatch(new Message<InboundKey, InboundValue> { }), Times.Never());
   }
 
   [Fact]
@@ -110,10 +113,22 @@ public class ConsumerTests : IDisposable
     var sut = new Consume(this._loggerMock.Object, this._kafkaMock.Object, this._dispatcherMock.Object);
     sut.Subscribe();
 
-    var cb = this._kafkaMock.Invocations[0].Arguments[1] as Action<ConsumeResult<dynamic, dynamic>?, Exception?>;
+    var cb = this._kafkaMock.Invocations[0].Arguments[1] as Action<ConsumeResult<InboundKey, InboundValue>?, Exception?>;
     cb(null, null);
 
-    this._kafkaMock.Verify(m => m.Commit(It.IsAny<ConsumeResult<dynamic, dynamic>>()), Times.Never());
+    this._kafkaMock.Verify(m => m.Commit(It.IsAny<ConsumeResult<InboundKey, InboundValue>>()), Times.Never());
+  }
+
+  [Fact]
+  public void Subscribe_IfTheDelegateProvidedAs2ndArgumentIsInvoked_IfAConsumeResultIsNotProvided_ItShouldNotCallDispatchOnTheDispatcherInstance()
+  {
+    var sut = new Consume(this._loggerMock.Object, this._kafkaMock.Object, this._dispatcherMock.Object);
+    sut.Subscribe();
+
+    var cb = this._kafkaMock.Invocations[0].Arguments[1] as Action<ConsumeResult<InboundKey, InboundValue>?, Exception?>;
+    cb(null, null);
+
+    this._dispatcherMock.Verify(m => m.Dispatch(It.IsAny<Message<InboundKey, InboundValue>>()), Times.Never());
   }
 
   [Fact]
@@ -122,9 +137,9 @@ public class ConsumerTests : IDisposable
     var sut = new Consume(this._loggerMock.Object, this._kafkaMock.Object, this._dispatcherMock.Object);
     sut.Subscribe();
 
-    var testConsumeRes = new ConsumeResult<dynamic, dynamic> { };
+    var testConsumeRes = new ConsumeResult<InboundKey, InboundValue> { };
 
-    var cb = this._kafkaMock.Invocations[0].Arguments[1] as Action<ConsumeResult<dynamic, dynamic>?, Exception?>;
+    var cb = this._kafkaMock.Invocations[0].Arguments[1] as Action<ConsumeResult<InboundKey, InboundValue>?, Exception?>;
     cb(null, null);
 
     this._loggerMock.Verify(m => m.Log(Microsoft.Extensions.Logging.LogLevel.Error, It.IsAny<Exception?>(), It.IsAny<string>()), Times.Never());
@@ -136,10 +151,10 @@ public class ConsumerTests : IDisposable
     var sut = new Consume(this._loggerMock.Object, this._kafkaMock.Object, this._dispatcherMock.Object);
     sut.Subscribe();
 
-    var testConsumeRes = new ConsumeResult<dynamic, dynamic> { };
+    var testConsumeRes = new ConsumeResult<InboundKey, InboundValue> { };
     var testEx = new Exception();
 
-    var cb = this._kafkaMock.Invocations[0].Arguments[1] as Action<ConsumeResult<dynamic, dynamic>?, Exception?>;
+    var cb = this._kafkaMock.Invocations[0].Arguments[1] as Action<ConsumeResult<InboundKey, InboundValue>?, Exception?>;
     cb(testConsumeRes, testEx);
 
     this._loggerMock.Verify(m => m.Log(Microsoft.Extensions.Logging.LogLevel.Error, testEx, ""), Times.Once());
