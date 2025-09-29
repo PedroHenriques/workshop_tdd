@@ -54,10 +54,21 @@ public class Dispatcher : IDispatcher
     }
   }
 
-  private void PublishCb(
+  private async void PublishCb(
     DeliveryResult<OutboundKey, OutboundValue>? res, Exception? ex
   )
   {
+    if (ex != null)
+    {
+      this._logger.Log(
+        Microsoft.Extensions.Logging.LogLevel.Error,
+        ex,
+        ex.Message
+      );
+    }
+
+    if (res == null) { return; }
+
     MongoDocument doc = new MongoDocument
     {
       Metadata = new Models.Metadata
@@ -72,6 +83,17 @@ public class Dispatcher : IDispatcher
       },
     };
 
-    this._mongo.InsertOne<MongoDocument>("MyDb", "MyColl", doc);
+    try
+    {
+      await this._mongo.InsertOne<MongoDocument>("MyDb", "MyColl", doc);
+    }
+    catch (Exception innerEx)
+    {
+      this._logger.Log(
+        Microsoft.Extensions.Logging.LogLevel.Error,
+        innerEx,
+        innerEx.Message
+      );
+    }
   }
 }

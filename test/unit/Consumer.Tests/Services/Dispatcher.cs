@@ -232,4 +232,92 @@ public class DispatcherTests : IDisposable
       JsonConvert.SerializeObject(actualDoc)
     );
   }
+
+  [Fact]
+  public void Dispatch_IfTheDelegateIsInvoked_IfAnExceptionIsProvided_ItShouldLogAnError()
+  {
+    var testInboundMsg = new Message<InboundKey, InboundValue>
+    {
+      Value = new InboundValue
+      {
+        Id = Guid.NewGuid(),
+        Type = 0,
+        Price = -4.3,
+      },
+    };
+
+    var sut = new Dispatcher(this._loggerMock.Object, this._kafkaMock.Object, this._mongoMock.Object);
+    sut.Dispatch(testInboundMsg);
+
+    var testEx = new Exception("something");
+
+    var cb = this._kafkaMock.Invocations[0].Arguments[2] as Action<DeliveryResult<OutboundKey, OutboundValue>?, Exception?>;
+    cb(null, testEx);
+
+    this._loggerMock.Verify(m => m.Log(Microsoft.Extensions.Logging.LogLevel.Error, testEx, testEx.Message));
+  }
+
+  [Fact]
+  public void Dispatch_IfTheDelegateIsInvoked_IfNoDeliveryResultIsProvided_ItShouldNotCallInsertOneOnTheToolkitMongoService()
+  {
+    var testInboundMsg = new Message<InboundKey, InboundValue>
+    {
+      Value = new InboundValue
+      {
+        Id = Guid.NewGuid(),
+        Type = 0,
+        Price = -4.3,
+      },
+    };
+
+    var sut = new Dispatcher(this._loggerMock.Object, this._kafkaMock.Object, this._mongoMock.Object);
+    sut.Dispatch(testInboundMsg);
+
+    var testEx = new Exception("something");
+
+    var cb = this._kafkaMock.Invocations[0].Arguments[2] as Action<DeliveryResult<OutboundKey, OutboundValue>?, Exception?>;
+    cb(null, null);
+
+    this._mongoMock.Verify(m => m.InsertOne<MongoDocument>(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<MongoDocument>()), Times.Never());
+  }
+
+  [Fact]
+  public void Dispatch_IfTheDelegateIsInvoked_IfCallingInsertOneOnTheToolkitMongoServiceThrowsAnException_ItShouldLogAnError()
+  {
+    var testEx = new Exception("chouriço");
+    this._mongoMock.Setup(s => s.InsertOne<MongoDocument>(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<MongoDocument>()))
+      .ThrowsAsync(testEx);
+
+    var testInboundMsg = new Message<InboundKey, InboundValue>
+    {
+      Value = new InboundValue
+      {
+        Id = Guid.NewGuid(),
+        Type = 0,
+        Price = -4.3,
+      },
+    };
+
+    var sut = new Dispatcher(this._loggerMock.Object, this._kafkaMock.Object, this._mongoMock.Object);
+    sut.Dispatch(testInboundMsg);
+
+    var testRes = new DeliveryResult<OutboundKey, OutboundValue>
+    {
+      Message = new Message<OutboundKey, OutboundValue>
+      {
+        Key = new OutboundKey { },
+        Value = new OutboundValue
+        {
+          Id = Guid.NewGuid(),
+          Timestamp = DateTime.Now,
+          Type = 123,
+        },
+      },
+    };
+
+    var cb = this._kafkaMock.Invocations[0].Arguments[2] as Action<DeliveryResult<OutboundKey, OutboundValue>?, Exception?>;
+    cb(testRes, null);
+
+    this._loggerMock.Verify(m => m.Log(Microsoft.Extensions.Logging.LogLevel.Error, testEx, testEx.Message));
+  }
 }

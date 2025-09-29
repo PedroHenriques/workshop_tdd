@@ -57,7 +57,15 @@ public class ConsumerTests : IDisposable
     var sut = new Consume(this._loggerMock.Object, this._kafkaMock.Object, this._dispatcherMock.Object);
     sut.Subscribe();
 
-    var testMsg = new Message<InboundKey, InboundValue> { };
+    var testMsg = new Message<InboundKey, InboundValue>
+    {
+      Value = new InboundValue
+      {
+        Id = Guid.Empty,
+        Price = 3,
+        Type = 1,
+      },
+    };
 
     var cb = this._kafkaMock.Invocations[0].Arguments[1] as Action<ConsumeResult<InboundKey, InboundValue>?, Exception?>;
     cb(new ConsumeResult<InboundKey, InboundValue> { Message = testMsg }, null);
@@ -71,7 +79,18 @@ public class ConsumerTests : IDisposable
     var sut = new Consume(this._loggerMock.Object, this._kafkaMock.Object, this._dispatcherMock.Object);
     sut.Subscribe();
 
-    var testConsumeRes = new ConsumeResult<InboundKey, InboundValue> { };
+    var testConsumeRes = new ConsumeResult<InboundKey, InboundValue>
+    {
+      Message = new Message<InboundKey, InboundValue>
+      {
+        Value = new InboundValue
+        {
+          Id = Guid.Empty,
+          Price = 3,
+          Type = 2,
+        },
+      },
+    };
 
     var cb = this._kafkaMock.Invocations[0].Arguments[1] as Action<ConsumeResult<InboundKey, InboundValue>?, Exception?>;
     cb(testConsumeRes, null);
@@ -151,12 +170,49 @@ public class ConsumerTests : IDisposable
     var sut = new Consume(this._loggerMock.Object, this._kafkaMock.Object, this._dispatcherMock.Object);
     sut.Subscribe();
 
-    var testConsumeRes = new ConsumeResult<InboundKey, InboundValue> { };
+    var testConsumeRes = new ConsumeResult<InboundKey, InboundValue>
+    {
+      Message = new Message<InboundKey, InboundValue>
+      {
+        Value = new InboundValue
+        {
+          Id = Guid.Empty,
+          Price = 3,
+          Type = 1,
+        },
+      },
+    };
     var testEx = new Exception();
 
     var cb = this._kafkaMock.Invocations[0].Arguments[1] as Action<ConsumeResult<InboundKey, InboundValue>?, Exception?>;
     cb(testConsumeRes, testEx);
 
     this._loggerMock.Verify(m => m.Log(Microsoft.Extensions.Logging.LogLevel.Error, testEx, ""), Times.Once());
+  }
+
+  [Fact]
+  public void Subscribe_IfTheDelegateProvidedAs2ndArgumentIsInvoked_IfTheReceivedMessageIsNotOneOfTheAllowedType_ItShouldNotCallDispatchOnThedispatcherInstance()
+  {
+    var sut = new Consume(this._loggerMock.Object, this._kafkaMock.Object, this._dispatcherMock.Object);
+    sut.Subscribe();
+
+    var testConsumeRes = new ConsumeResult<InboundKey, InboundValue>
+    {
+      Message = new Message<InboundKey, InboundValue>
+      {
+        Value = new InboundValue
+        {
+          Id = Guid.Empty,
+          Price = 8.43,
+          Type = 5,
+        },
+      },
+    };
+    var testEx = new Exception();
+
+    var cb = this._kafkaMock.Invocations[0].Arguments[1] as Action<ConsumeResult<InboundKey, InboundValue>?, Exception?>;
+    cb(testConsumeRes, testEx);
+
+    this._dispatcherMock.Verify(m => m.Dispatch(It.IsAny<Message<InboundKey, InboundValue>>()), Times.Never());
   }
 }

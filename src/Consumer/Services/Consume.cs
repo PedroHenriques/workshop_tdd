@@ -6,6 +6,7 @@ namespace Consumer;
 
 public class Consume
 {
+  private int[] _allowed_types = [1, 2];
   private readonly ILogger _logger;
   private readonly IKafka<InboundKey, InboundValue> _kafka;
   private readonly IDispatcher _dispatcher;
@@ -39,7 +40,11 @@ public class Consume
 
     if (res == null) { return; }
 
-    this._dispatcher.Dispatch(res.Message);
+    if (this._allowed_types.Contains(res.Message.Value.Type))
+    {
+      this._dispatcher.Dispatch(res.Message);
+    }
+
     this._kafka.Commit(res);
   }
 }
